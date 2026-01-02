@@ -48,7 +48,16 @@
 - [ ] Build spare parts search system
 - [ ] Create service offering display (repair, spare parts, contracts)
 
-## Phase 9: Testing & Deployment
+## Phase 9: Bug Fixes & Enhancements
+- [ ] FIX: Search button in chat interface
+- [ ] FIX: File upload button functionality
+- [ ] ADD: Drag-and-drop file upload
+- [ ] ADD: Image and file preview in chat
+- [ ] ADD: Forum credentials storage system
+- [ ] ADD: Secure credential encryption
+- [ ] INTEGRATE: Credentials into web scraper
+
+## Phase 10: Testing & Deployment
 - [ ] Write comprehensive test suite
 - [ ] Test OCR and document processing
 - [ ] Validate LLM integration

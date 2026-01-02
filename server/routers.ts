@@ -7,6 +7,7 @@ import { faultsRouter } from "./routers/faults";
 import { searchRouter } from "./routers/search";
 import { subscriptionsRouter } from "./routers/subscriptions";
 import { adminRouter } from "./routers/admin";
+import { forumCredentialsRouter } from "./routers/forum-credentials";
 
 export const appRouter = router({
     // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
@@ -16,6 +17,7 @@ export const appRouter = router({
   search: searchRouter,
   subscriptions: subscriptionsRouter,
   admin: adminRouter,
+  forumCredentials: forumCredentialsRouter,
   auth: router({
     me: publicProcedure.query(opts => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
