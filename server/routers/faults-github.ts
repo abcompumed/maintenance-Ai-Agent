@@ -1,0 +1,208 @@
+import { z } from "zod";
+import { protectedProcedure, router } from "../_core/trpc";
+import { getDb } from "../db";
+import { faults, githubIntegration } from "../../drizzle/schema";
+import { createGitHubManager } from "../github-integration";
+import { eq } from "drizzle-orm";
+
+export const faultsGitHubRouter = router({
+  /**
+   * Analyze fault and optionally create GitHub issue
+   */
+  analyzeFaultWithGitHub: protectedProcedure
+    .input(
+      z.object({
+        deviceType: z.string(),
+        manufacturer: z.string(),
+        deviceModel: z.string(),
+        faultDescription: z.string(),
+        symptoms: z.array(z.string()).optional(),
+        createGitHubIssue: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+
+      try {
+        // Analyze the fault (this would call the AI agent)
+        // For now, we'll create a placeholder response
+        const faultAnalysis = {
+          rootCause: "Analysis pending",
+          solution: "Solution pending",
+          requiredParts: [] as string[],
+          repairDifficulty: "medium" as const,
+          estimatedTime: "2-4 hours",
+        };
+
+        // Save fault to database
+        const faultResult = await db.insert(faults).values({
+          userId: ctx.user.id,
+          deviceType: input.deviceType,
+          manufacturer: input.manufacturer,
+          deviceModel: input.deviceModel,
+          faultDescription: input.faultDescription,
+          symptoms: input.symptoms?.join(",") || "",
+          rootCause: faultAnalysis.rootCause,
+          solution: faultAnalysis.solution,
+          partsRequired: faultAnalysis.requiredParts.join(","),
+          difficulty: faultAnalysis.repairDifficulty,
+          estimatedRepairTime: faultAnalysis.estimatedTime,
+          views: 0,
+          helpful: 0,
+          notHelpful: 0,
+        });
+
+        let githubResult = null;
+
+        // Create GitHub issue if requested
+        if (input.createGitHubIssue) {
+          const integration = await db
+            .select()
+            .from(githubIntegration)
+            .where(eq(githubIntegration.userId, ctx.user.id))
+            .limit(1);
+
+          if (integration.length && integration[0].isActive && integration[0].autoCreateIssues) {
+            try {
+              const manager = createGitHubManager(
+                integration[0].githubUsername,
+                integration[0].repositoryName,
+                integration[0].encryptedAccessToken,
+                integration[0].encryptionIv
+              );
+
+              githubResult = await manager.createFaultIssue(
+                `${input.deviceType} - ${input.manufacturer} ${input.deviceModel}`,
+                input.faultDescription,
+                input.deviceType,
+                input.manufacturer,
+                input.deviceModel,
+                faultAnalysis.rootCause,
+                faultAnalysis.solution
+              );
+            } catch (error) {
+              console.warn("Failed to create GitHub issue:", error);
+              // Don't fail the entire operation if GitHub issue creation fails
+            }
+          }
+        }
+
+        return {
+          success: true,
+          analysis: faultAnalysis,
+          githubIssue: githubResult,
+        };
+      } catch (error) {
+        console.error("Error analyzing fault:", error);
+        throw new Error(
+          `Failed to analyze fault: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }),
+
+  /**
+   * Export fault as markdown and create GitHub PR
+   */
+  exportFaultAsMarkdown: protectedProcedure
+    .input(
+      z.object({
+        faultId: z.number(),
+        createPullRequest: z.boolean().default(false),
+      })
+    )
+    .mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new Error("Database connection failed");
+
+      try {
+        // Get fault from database
+        const faultResult = await db
+          .select()
+          .from(faults)
+          .where(eq(faults.id, input.faultId))
+          .limit(1);
+
+        if (!faultResult.length) {
+          throw new Error("Fault not found");
+        }
+
+        const fault = faultResult[0];
+
+        // Generate markdown content
+        const markdownContent = `# ${fault.deviceType} - ${fault.manufacturer} ${fault.deviceModel}
+
+## Fault Description
+${fault.faultDescription}
+
+## Symptoms
+${fault.symptoms ? fault.symptoms.split(",").map((s: string) => `- ${s.trim()}`).join("\n") : "- Not specified"}
+
+## Root Cause
+${fault.rootCause || "To be determined"}
+
+## Solution
+${fault.solution || "To be determined"}
+
+## Required Parts
+${fault.partsRequired ? fault.partsRequired.split(",").map((p: string) => `- ${p.trim()}`).join("\n") : "- None specified"}
+
+## Repair Difficulty
+${fault.difficulty}
+
+## Estimated Repair Time
+${fault.estimatedRepairTime || "Not specified"}
+
+## Status
+⏳ Pending
+
+---
+*Generated by ABCompuMed AI Agent*
+*Created: ${fault.createdAt?.toISOString()}*
+`;
+
+        let prResult = null;
+
+        // Create GitHub PR if requested
+        if (input.createPullRequest) {
+          const integration = await db
+            .select()
+            .from(githubIntegration)
+            .where(eq(githubIntegration.userId, ctx.user.id))
+            .limit(1);
+
+          if (integration.length && integration[0].isActive && integration[0].autoCreatePRs) {
+            try {
+              const manager = createGitHubManager(
+                integration[0].githubUsername,
+                integration[0].repositoryName,
+                integration[0].encryptedAccessToken,
+                integration[0].encryptionIv
+              );
+
+              prResult = await manager.createSolutionPR(
+                input.faultId,
+                `${fault.deviceType} - ${fault.manufacturer}`,
+                markdownContent,
+                fault.deviceType
+              );
+            } catch (error) {
+              console.warn("Failed to create GitHub PR:", error);
+              // Don't fail if PR creation fails
+            }
+          }
+        }
+
+        return {
+          success: true,
+          markdown: markdownContent,
+          githubPR: prResult,
+        };
+      } catch (error) {
+        console.error("Error exporting fault:", error);
+        throw new Error(
+          `Failed to export fault: ${error instanceof Error ? error.message : "Unknown error"}`
+        );
+      }
+    }),
+});

@@ -9,6 +9,7 @@ import ChatInterface from "./pages/ChatInterface";
 import Pricing from "./pages/Pricing";
 import AdminDashboard from "./pages/AdminDashboard";
 import ForumCredentials from "./pages/ForumCredentials";
+import GitHubSettings from "./pages/GitHubSettings";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -19,6 +20,7 @@ function Router() {
       <Route path={"/pricing"} component={Pricing} />
       <Route path={"/admin"} component={AdminDashboard} />
       <Route path={"/forum-credentials"} component={ForumCredentials} />
+      <Route path={"/github-settings"} component={GitHubSettings} />
       <Route path={"/404"} component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

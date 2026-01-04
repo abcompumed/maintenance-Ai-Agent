@@ -78,3 +78,15 @@
 - Privacy: Respect website terms of service
 - Fault classification: Device type, usage, manufacturer, model
 - Spare parts: Search by part number, name, specifications, datasheet
+
+## Phase 9: GitHub Integration
+- [x] Setup GitHub OAuth integration
+- [x] Create GitHub API module for repository operations
+- [x] Implement auto-create GitHub issues for new faults
+- [x] Implement auto-create pull requests for solutions
+- [x] Build markdown export and fault documentation system
+- [ ] Implement two-way sync with knowledge base
+- [x] Add GitHub repository search as data source
+- [x] Implement full source code sync to GitHub
+- [x] Build GitHub integration UI and settings
+- [ ] Test GitHub integration end-to-end
