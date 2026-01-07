@@ -16,7 +16,7 @@ import {
 } from "../paypal-integration";
 
 // ضع إيميلك هنا كما فعلنا في الملف السابق
-const SUPER_ADMIN_EMAIL = "اكتب_ايميلك_هنا@gmail.com";
+const SUPER_ADMIN_EMAIL = "didofido812@gmail.com";
 
 export const subscriptionsRouter = router({
   /**
