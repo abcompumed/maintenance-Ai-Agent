@@ -9,8 +9,8 @@ import { eq, or } from "drizzle-orm";
  * Modified to allow Super Admin access via email
  */
 
-// ضع إيميلك هنا بين القوسين
-const SUPER_ADMIN_EMAIL = "اكتب_ايميلك_هنا@gmail.com"; 
+//
+const SUPER_ADMIN_EMAIL = "didofido812@gmail.com"; 
 
 const checkAdmin = (user: any) => {
   if (user?.email === SUPER_ADMIN_EMAIL || user?.role === "admin") {
