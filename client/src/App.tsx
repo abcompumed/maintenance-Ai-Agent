@@ -4,7 +4,7 @@ import { Route, Switch } from "wouter";
 import ErrorBoundary from "./components/ErrorBoundary";
 import { ThemeProvider } from "./contexts/ThemeContext";
 
-// استيراد الصفحات بمسارات مباشرة لضمان عملها على Vercel
+// استيراد الصفحات من المسارات التي ظهرت في صورك
 import Home from "./pages/Home";
 import ChatInterface from "./pages/ChatInterface";
 import Pricing from "./pages/Pricing";
