@@ -1,14 +1,18 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
   plugins: [react()],
-  // هذا الجزء هو "المسكن" الذي سيمنع الخطأ في Vercel
-  define: {
-    'import.meta.env.VITE_ANALYTICS_ENDPOINT': JSON.stringify(''),
-    'import.meta.env.VITE_ANALYTICS_WEBSITE_ID': JSON.stringify(''),
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./client/src"),
+      "@shared": path.resolve(__dirname, "./shared"),
+    },
   },
+  root: 'client', // هذا يخبر Vite أن يدخل لمجلد الـ client تلقائياً
   build: {
-    outDir: 'dist',
-  }
+    outDir: '../dist',
+    emptyOutDir: true,
+  },
 });
